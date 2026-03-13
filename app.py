@@ -12,7 +12,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-# ---------- FUNCTIONS ----------
+# -------- FUNCTIONS --------
 
 def normalize(value, length):
     if length == 0:
@@ -34,7 +34,7 @@ def risk_score(ant, hq, addabd):
 
     return score
 
-# ---------- HEADER ----------
+# -------- HEADER --------
 
 col1,col2 = st.columns([1,6])
 
@@ -46,15 +46,15 @@ with col2:
     st.title("Dynamo Fyzio Screening")
     st.caption("SK Dynamo České Budějovice – Akademie")
 
-tab1, tab2, tab3 = st.tabs(["Nové měření","Historie hráče","Dashboard"])
+tab1, tab2, tab3 = st.tabs(["Nové měření","Historie hráčů","Dashboard"])
 
-# ---------- TAB 1 ----------
+# -------- TAB 1 --------
 
 with tab1:
 
     st.header("Nové měření")
 
-    category = st.selectbox("Kategorie",["U15","U16","U17","U18","U19","A tým"])
+    category = st.selectbox("Kategorie",["U16","U17","U18","U19"])
     player = st.text_input("Jméno hráče")
 
     col1,col2 = st.columns(2)
@@ -144,7 +144,6 @@ with tab1:
 
         if recommendation == "":
             st.success("Bez výrazných deficitů")
-
         else:
             st.write(recommendation)
 
@@ -180,49 +179,64 @@ with tab1:
 
         st.success("Test uložen")
 
-# ---------- TAB 2 ----------
+# -------- TAB 2 --------
 
 with tab2:
 
-    st.header("Historie hráče")
+    st.header("Historie hráčů podle kategorií")
 
     response = supabase.table("tests").select("*").execute()
-
     df = pd.DataFrame(response.data)
 
-    if len(df)==0:
-
+    if len(df) == 0:
         st.info("Zatím žádná data")
 
     else:
 
-        player_select = st.selectbox("Vyber hráče", df["player"].unique())
+        categories = ["U16","U17","U18","U19"]
 
-        player_df = df[df["player"] == player_select]
+        for cat in categories:
 
-        st.dataframe(player_df)
+            st.subheader(cat)
 
-        fig = plt.figure()
+            cat_df = df[df["category"] == cat]
 
-        plt.plot(player_df["date"], player_df["ham_r"], label="Hamstring R")
-        plt.plot(player_df["date"], player_df["ham_l"], label="Hamstring L")
+            if len(cat_df) == 0:
+                st.write("Žádná data")
+                continue
 
-        plt.legend()
+            players = cat_df["player"].unique()
 
-        st.pyplot(fig)
+            player_select = st.selectbox(
+                f"Vyber hráče {cat}",
+                players,
+                key=cat
+            )
 
-# ---------- TAB 3 ----------
+            player_df = cat_df[cat_df["player"] == player_select]
+
+            st.dataframe(player_df)
+
+            fig = plt.figure()
+
+            plt.plot(player_df["date"], player_df["ham_r"], label="Hamstring R")
+            plt.plot(player_df["date"], player_df["ham_l"], label="Hamstring L")
+
+            plt.title(f"Vývoj síly – {player_select}")
+            plt.legend()
+
+            st.pyplot(fig)
+
+# -------- TAB 3 --------
 
 with tab3:
 
     st.header("Dashboard týmu")
 
     response = supabase.table("tests").select("*").execute()
-
     df = pd.DataFrame(response.data)
 
-    if len(df)==0:
-
+    if len(df) == 0:
         st.info("Zatím žádná data")
 
     else:
