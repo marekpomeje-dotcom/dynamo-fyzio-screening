@@ -2,6 +2,7 @@ from supabase import create_client
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
 import os
 
@@ -12,14 +13,14 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-# -------- FUNCTIONS --------
+# ---------- FUNCTIONS ----------
 
-def normalize(value, length):
+def normalize(value,length):
     if length == 0:
         return 0
-    return (value / length) * 100
+    return (value/length)*100
 
-def risk_score(ant, hq, addabd):
+def risk_score(ant,hq,addabd):
 
     score = 0
 
@@ -34,46 +35,86 @@ def risk_score(ant, hq, addabd):
 
     return score
 
-# -------- HEADER --------
+def color(value,limit):
+
+    if value < limit:
+        return "🔴"
+
+    if value < limit+5:
+        return "🟠"
+
+    return "🟢"
+
+
+# ---------- HEADER ----------
 
 col1,col2 = st.columns([1,6])
 
 with col1:
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=120)
+        st.image("logo.png",width=120)
 
 with col2:
     st.title("Dynamo Fyzio Screening")
     st.caption("SK Dynamo České Budějovice – Akademie")
 
-tab1, tab2, tab3 = st.tabs(["Nové měření","Historie hráčů","Dashboard"])
 
-# -------- TAB 1 --------
+tab1,tab2,tab3,tab4 = st.tabs(["Dashboard","Nové měření","Historie hráčů","Karta hráče"])
+
+
+# ---------- DASHBOARD ----------
 
 with tab1:
+
+    st.header("Team Risk Dashboard")
+
+    response = supabase.table("tests").select("*").execute()
+    df = pd.DataFrame(response.data)
+
+    if len(df)==0:
+
+        st.info("Zatím žádná data")
+
+    else:
+
+        latest = df.sort_values("date").groupby("player").tail(1)
+
+        st.metric("Počet hráčů",len(latest))
+
+        risk_players = latest[latest["risk"]>40]
+
+        st.subheader("Rizikoví hráči")
+
+        st.dataframe(risk_players[["player","category","risk","recommendation"]])
+
+
+# ---------- NEW TEST ----------
+
+with tab2:
 
     st.header("Nové měření")
 
     category = st.selectbox("Kategorie",["U16","U17","U18","U19"])
+
     player = st.text_input("Jméno hráče")
 
     col1,col2 = st.columns(2)
 
     with col1:
-        height = st.number_input("Výška (cm)", value=180)
+        height = st.number_input("Výška",value=180)
 
     with col2:
-        weight = st.number_input("Váha (kg)", value=75)
+        weight = st.number_input("Váha",value=75)
 
-    st.subheader("Délka dolní končetiny")
+    st.subheader("Délka končetiny")
 
     col1,col2 = st.columns(2)
 
     with col1:
-        leg_r = st.number_input("Pravá DK (cm)", value=90.0)
+        leg_r = st.number_input("Pravá DK",value=90.0)
 
     with col2:
-        leg_l = st.number_input("Levá DK (cm)", value=90.0)
+        leg_l = st.number_input("Levá DK",value=90.0)
 
     st.subheader("Y Balance")
 
@@ -107,147 +148,165 @@ with tab1:
 
     if st.button("Vyhodnotit a uložit"):
 
-        ant_norm = normalize(ant_r, leg_r)
+        ant_norm = normalize(ant_r,leg_r)
 
         hq = ham_r/quad_r if quad_r>0 else 0
         addabd = add_r/abd_r if abd_r>0 else 0
 
-        risk = risk_score(ant_norm, hq, addabd)
+        risk = risk_score(ant_norm,hq,addabd)
 
         recommendation = ""
 
         if ant_norm < 72:
-            recommendation += "Sagittální deficit – ankle mobility, split squat, step-down.\n"
+            recommendation += "Sagittální deficit – ankle mobility, split squat\n"
 
         if hq < 0.6:
-            recommendation += "Nízké H:Q ratio – Nordic hamstring, excentrický RDL.\n"
+            recommendation += "Nízké H:Q – Nordic hamstring\n"
 
         if addabd < 0.8:
-            recommendation += "Nízká síla adduktorů – Copenhagen plank.\n"
-
-        # -------- RESULT --------
+            recommendation += "Slabé adduktory – Copenhagen plank\n"
 
         st.subheader("Vyhodnocení")
 
-        if risk < 20:
-            st.success("🟢 Nízké riziko")
+        st.write("ANT:",round(ant_norm,1),color(ant_norm,72))
 
-        elif risk < 50:
-            st.warning("🟠 Střední riziko")
+        st.write("H:Q:",round(hq,2),color(hq,0.6))
 
-        else:
-            st.error("🔴 Vysoké riziko")
+        st.write("Add/Abd:",round(addabd,2),color(addabd,0.8))
 
-        st.metric("Risk score", risk)
+        st.metric("Risk score",risk)
 
         st.subheader("Doporučení")
 
-        if recommendation == "":
+        if recommendation=="":
             st.success("Bez výrazných deficitů")
+
         else:
             st.write(recommendation)
 
         data = {
 
-            "player": player,
-            "category": category,
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "height": height,
-            "weight": weight,
+            "player":player,
+            "category":category,
+            "date":datetime.now().strftime("%Y-%m-%d"),
 
-            "ant_r": ant_r,
-            "ant_l": ant_l,
-            "pm_r": pm_r,
-            "pm_l": pm_l,
-            "pl_r": pl_r,
-            "pl_l": pl_l,
+            "height":height,
+            "weight":weight,
 
-            "ham_r": ham_r,
-            "ham_l": ham_l,
-            "quad_r": quad_r,
-            "quad_l": quad_l,
-            "add_r": add_r,
-            "add_l": add_l,
-            "abd_r": abd_r,
-            "abd_l": abd_l,
+            "ant_r":ant_r,
+            "ant_l":ant_l,
+            "pm_r":pm_r,
+            "pm_l":pm_l,
+            "pl_r":pl_r,
+            "pl_l":pl_l,
 
-            "recommendation": recommendation,
-            "risk": risk
+            "ham_r":ham_r,
+            "ham_l":ham_l,
+            "quad_r":quad_r,
+            "quad_l":quad_l,
+
+            "add_r":add_r,
+            "add_l":add_l,
+            "abd_r":abd_r,
+            "abd_l":abd_l,
+
+            "risk":risk,
+            "recommendation":recommendation
+
         }
 
         supabase.table("tests").insert(data).execute()
 
         st.success("Test uložen")
 
-# -------- TAB 2 --------
 
-with tab2:
-
-    st.header("Historie hráčů podle kategorií")
-
-    response = supabase.table("tests").select("*").execute()
-    df = pd.DataFrame(response.data)
-
-    if len(df) == 0:
-        st.info("Zatím žádná data")
-
-    else:
-
-        categories = ["U16","U17","U18","U19"]
-
-        for cat in categories:
-
-            st.subheader(cat)
-
-            cat_df = df[df["category"] == cat]
-
-            if len(cat_df) == 0:
-                st.write("Žádná data")
-                continue
-
-            players = cat_df["player"].unique()
-
-            player_select = st.selectbox(
-                f"Vyber hráče {cat}",
-                players,
-                key=cat
-            )
-
-            player_df = cat_df[cat_df["player"] == player_select]
-
-            st.dataframe(player_df)
-
-            fig = plt.figure()
-
-            plt.plot(player_df["date"], player_df["ham_r"], label="Hamstring R")
-            plt.plot(player_df["date"], player_df["ham_l"], label="Hamstring L")
-
-            plt.title(f"Vývoj síly – {player_select}")
-            plt.legend()
-
-            st.pyplot(fig)
-
-# -------- TAB 3 --------
+# ---------- HISTORY ----------
 
 with tab3:
 
-    st.header("Dashboard týmu")
+    st.header("Historie podle kategorií")
 
     response = supabase.table("tests").select("*").execute()
     df = pd.DataFrame(response.data)
 
-    if len(df) == 0:
-        st.info("Zatím žádná data")
+    if len(df)==0:
+
+        st.info("Žádná data")
 
     else:
 
-        st.metric("Počet testů", len(df))
+        for cat in ["U16","U17","U18","U19"]:
 
-        st.write("Průměr hamstring R:", round(df["ham_r"].mean(),2))
-        st.write("Průměr hamstring L:", round(df["ham_l"].mean(),2))
+            st.subheader(cat)
 
-        risk_players = df[df["risk"] > 40]
+            cat_df = df[df["category"]==cat]
 
-        st.subheader("Rizikoví hráči")
+            if len(cat_df)==0:
 
-        st.dataframe(risk_players[["player","risk","recommendation"]])
+                st.write("Žádná data")
+
+                continue
+
+            st.dataframe(cat_df)
+
+
+# ---------- PLAYER CARD ----------
+
+with tab4:
+
+    st.header("Karta hráče")
+
+    response = supabase.table("tests").select("*").execute()
+    df = pd.DataFrame(response.data)
+
+    if len(df)==0:
+
+        st.info("Žádná data")
+
+    else:
+
+        player_select = st.selectbox("Vyber hráče",df["player"].unique())
+
+        player_df = df[df["player"]==player_select]
+
+        st.dataframe(player_df)
+
+        st.subheader("Graf vývoje síly")
+
+        fig = plt.figure()
+
+        plt.plot(player_df["date"],player_df["ham_r"],label="Hamstring R")
+        plt.plot(player_df["date"],player_df["ham_l"],label="Hamstring L")
+
+        plt.legend()
+
+        st.pyplot(fig)
+
+        st.subheader("Radar graf Y Balance")
+
+        latest = player_df.iloc[-1]
+
+        values = [
+
+            latest["ant_r"],
+            latest["pm_r"],
+            latest["pl_r"]
+
+        ]
+
+        labels = ["ANT","PM","PL"]
+
+        angles = np.linspace(0,2*np.pi,len(labels),endpoint=False)
+
+        values = np.concatenate((values,[values[0]]))
+        angles = np.concatenate((angles,[angles[0]]))
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111,polar=True)
+
+        ax.plot(angles,values)
+        ax.fill(angles,values,alpha=0.25)
+
+        ax.set_thetagrids(angles[:-1]*180/np.pi,labels)
+
+        st.pyplot(fig)
