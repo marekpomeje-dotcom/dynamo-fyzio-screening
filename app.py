@@ -12,17 +12,12 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-# ---------------- FUNCTIONS ----------------
+# ---------- FUNCTIONS ----------
 
-def normalize(v,l):
-    if l == 0:
+def normalize(value, length):
+    if length == 0:
         return 0
-    return (v/l)*100
-
-def asym(a,b):
-    if max(a,b)==0:
-        return 0
-    return abs(a-b)/max(a,b)*100
+    return (value / length) * 100
 
 def risk_score(ant, hq, addabd):
 
@@ -39,7 +34,7 @@ def risk_score(ant, hq, addabd):
 
     return score
 
-# ---------------- HEADER ----------------
+# ---------- HEADER ----------
 
 col1,col2 = st.columns([1,6])
 
@@ -53,7 +48,7 @@ with col2:
 
 tab1, tab2, tab3 = st.tabs(["Nové měření","Historie hráče","Dashboard"])
 
-# ---------------- NEW TEST ----------------
+# ---------- TAB 1 ----------
 
 with tab1:
 
@@ -112,7 +107,7 @@ with tab1:
 
     if st.button("Vyhodnotit a uložit"):
 
-        ant_norm = normalize(ant_r,leg_r)
+        ant_norm = normalize(ant_r, leg_r)
 
         hq = ham_r/quad_r if quad_r>0 else 0
         addabd = add_r/abd_r if abd_r>0 else 0
@@ -122,50 +117,70 @@ with tab1:
         recommendation = ""
 
         if ant_norm < 72:
-            recommendation += "Sagittální deficit – ankle mobility, split squat. "
+            recommendation += "Sagittální deficit – ankle mobility, split squat, step-down.\n"
 
         if hq < 0.6:
-            recommendation += "Nízké H:Q – Nordic hamstring. "
+            recommendation += "Nízké H:Q ratio – Nordic hamstring, excentrický RDL.\n"
 
         if addabd < 0.8:
-            recommendation += "Slabé adduktory – Copenhagen plank. "
+            recommendation += "Nízká síla adduktorů – Copenhagen plank.\n"
+
+        # -------- RESULT --------
+
+        st.subheader("Vyhodnocení")
+
+        if risk < 20:
+            st.success("🟢 Nízké riziko")
+
+        elif risk < 50:
+            st.warning("🟠 Střední riziko")
+
+        else:
+            st.error("🔴 Vysoké riziko")
+
+        st.metric("Risk score", risk)
+
+        st.subheader("Doporučení")
+
+        if recommendation == "":
+            st.success("Bez výrazných deficitů")
+
+        else:
+            st.write(recommendation)
 
         data = {
 
-            "player":player,
-            "category":category,
-            "date":datetime.now().strftime("%Y-%m-%d"),
-            "height":height,
-            "weight":weight,
+            "player": player,
+            "category": category,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "height": height,
+            "weight": weight,
 
-            "ant_r":ant_r,
-            "ant_l":ant_l,
-            "pm_r":pm_r,
-            "pm_l":pm_l,
-            "pl_r":pl_r,
-            "pl_l":pl_l,
+            "ant_r": ant_r,
+            "ant_l": ant_l,
+            "pm_r": pm_r,
+            "pm_l": pm_l,
+            "pl_r": pl_r,
+            "pl_l": pl_l,
 
-            "ham_r":ham_r,
-            "ham_l":ham_l,
-            "quad_r":quad_r,
-            "quad_l":quad_l,
-            "add_r":add_r,
-            "add_l":add_l,
-            "abd_r":abd_r,
-            "abd_l":abd_l,
+            "ham_r": ham_r,
+            "ham_l": ham_l,
+            "quad_r": quad_r,
+            "quad_l": quad_l,
+            "add_r": add_r,
+            "add_l": add_l,
+            "abd_r": abd_r,
+            "abd_l": abd_l,
 
-            "recommendation":recommendation,
-            "risk":risk
-
+            "recommendation": recommendation,
+            "risk": risk
         }
 
         supabase.table("tests").insert(data).execute()
 
         st.success("Test uložen")
 
-        st.metric("Risk score", risk)
-
-# ---------------- HISTORY ----------------
+# ---------- TAB 2 ----------
 
 with tab2:
 
@@ -177,13 +192,13 @@ with tab2:
 
     if len(df)==0:
 
-        st.info("Žádná data")
+        st.info("Zatím žádná data")
 
     else:
 
         player_select = st.selectbox("Vyber hráče", df["player"].unique())
 
-        player_df = df[df["player"]==player_select]
+        player_df = df[df["player"] == player_select]
 
         st.dataframe(player_df)
 
@@ -196,7 +211,7 @@ with tab2:
 
         st.pyplot(fig)
 
-# ---------------- DASHBOARD ----------------
+# ---------- TAB 3 ----------
 
 with tab3:
 
@@ -208,7 +223,7 @@ with tab3:
 
     if len(df)==0:
 
-        st.info("Žádná data")
+        st.info("Zatím žádná data")
 
     else:
 
@@ -217,7 +232,7 @@ with tab3:
         st.write("Průměr hamstring R:", round(df["ham_r"].mean(),2))
         st.write("Průměr hamstring L:", round(df["ham_l"].mean(),2))
 
-        risk_players = df[df["risk"]>40]
+        risk_players = df[df["risk"] > 40]
 
         st.subheader("Rizikoví hráči")
 
