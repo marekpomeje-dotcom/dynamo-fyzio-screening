@@ -1,9 +1,9 @@
 from supabase import create_client
 import streamlit as st
 import pandas as pd
-import os
-from datetime import datetime
 import matplotlib.pyplot as plt
+from datetime import datetime
+import os
 
 SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
 SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
@@ -11,6 +11,8 @@ SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
+
+# ---------------- FUNCTIONS ----------------
 
 def normalize(v,l):
     if l == 0:
@@ -22,6 +24,23 @@ def asym(a,b):
         return 0
     return abs(a-b)/max(a,b)*100
 
+def risk_score(ant, hq, addabd):
+
+    score = 0
+
+    if ant < 72:
+        score += 30
+
+    if hq < 0.6:
+        score += 30
+
+    if addabd < 0.8:
+        score += 30
+
+    return score
+
+# ---------------- HEADER ----------------
+
 col1,col2 = st.columns([1,6])
 
 with col1:
@@ -32,11 +51,13 @@ with col2:
     st.title("Dynamo Fyzio Screening")
     st.caption("SK Dynamo České Budějovice – Akademie")
 
-tab1, tab2 = st.tabs(["Nové měření","Historie hráčů"])
+tab1, tab2, tab3 = st.tabs(["Nové měření","Historie hráče","Dashboard"])
+
+# ---------------- NEW TEST ----------------
 
 with tab1:
 
-    st.header("Zadání nového testu")
+    st.header("Nové měření")
 
     category = st.selectbox("Kategorie",["U15","U16","U17","U18","U19","A tým"])
     player = st.text_input("Jméno hráče")
@@ -73,101 +94,131 @@ with tab1:
         pm_l = st.number_input("PM levá")
         pl_l = st.number_input("PL levá")
 
-    st.subheader("Síla (Tindeq)")
+    st.subheader("Síla")
 
     col1,col2 = st.columns(2)
 
     with col1:
-        ham_r = st.number_input("Hamstring pravá (N/kg)")
-        quad_r = st.number_input("Quadriceps pravá (N/kg)")
-        add_r = st.number_input("Adduktor pravá (N/kg)")
-        abd_r = st.number_input("Abduktor pravá (N/kg)")
+        ham_r = st.number_input("Hamstring pravá")
+        quad_r = st.number_input("Quadriceps pravá")
+        add_r = st.number_input("Adduktor pravá")
+        abd_r = st.number_input("Abduktor pravá")
 
     with col2:
-        ham_l = st.number_input("Hamstring levá (N/kg)")
-        quad_l = st.number_input("Quadriceps levá (N/kg)")
-        add_l = st.number_input("Adduktor levá (N/kg)")
-        abd_l = st.number_input("Abduktor levá (N/kg)")
+        ham_l = st.number_input("Hamstring levá")
+        quad_l = st.number_input("Quadriceps levá")
+        add_l = st.number_input("Adduktor levá")
+        abd_l = st.number_input("Abduktor levá")
 
     if st.button("Vyhodnotit a uložit"):
 
-        ant_r_n = normalize(ant_r,leg_r)
-        ant_l_n = normalize(ant_l,leg_l)
+        ant_norm = normalize(ant_r,leg_r)
 
-        comp_r = (ant_r+pm_r+pl_r)/(3*leg_r)*100 if leg_r>0 else 0
-        comp_l = (ant_l+pm_l+pl_l)/(3*leg_l)*100 if leg_l>0 else 0
+        hq = ham_r/quad_r if quad_r>0 else 0
+        addabd = add_r/abd_r if abd_r>0 else 0
 
-        hq_r = ham_r/quad_r if quad_r>0 else 0
-        hq_l = ham_l/quad_l if quad_l>0 else 0
-
-        addabd_r = add_r/abd_r if abd_r>0 else 0
-        addabd_l = add_l/abd_l if abd_l>0 else 0
-
-        st.subheader("Výsledky")
-
-        st.write("ANT pravá:", round(ant_r_n,1))
-        st.write("ANT levá:", round(ant_l_n,1))
-        st.write("Kompozit pravá:", round(comp_r,1))
-        st.write("Kompozit levá:", round(comp_l,1))
-
-        st.subheader("Poměry síly")
-
-        st.write("H:Q pravá:", round(hq_r,2))
-        st.write("H:Q levá:", round(hq_l,2))
-        st.write("Add/Abd pravá:", round(addabd_r,2))
-        st.write("Add/Abd levá:", round(addabd_l,2))
+        risk = risk_score(ant_norm, hq, addabd)
 
         recommendation = ""
 
-        if ant_r_n < 72 or ant_l_n < 72:
-            st.warning("Deficit sagittální roviny – ankle mobility, split squat, step-down")
-            recommendation += "Sagittální deficit – ankle mobility, split squat, step-down. "
+        if ant_norm < 72:
+            recommendation += "Sagittální deficit – ankle mobility, split squat. "
 
-        if hq_r < 0.6 or hq_l < 0.6:
-            st.warning("Nízké H:Q ratio – Nordic hamstring, excentrický RDL")
-            recommendation += "Nízké H:Q – Nordic hamstring, excentrický RDL. "
+        if hq < 0.6:
+            recommendation += "Nízké H:Q – Nordic hamstring. "
 
-        if addabd_r < 0.8 or addabd_l < 0.8:
-            st.warning("Nízký poměr adduktor/abduktor – Copenhagen plank")
+        if addabd < 0.8:
             recommendation += "Slabé adduktory – Copenhagen plank. "
 
         data = {
-            "player": player,
-            "category": category,
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "height": height,
-            "weight": weight,
-            "ant_r": ant_r,
-            "ant_l": ant_l,
-            "pm_r": pm_r,
-            "pm_l": pm_l,
-            "pl_r": pl_r,
-            "pl_l": pl_l,
-            "ham_r": ham_r,
-            "ham_l": ham_l,
-            "quad_r": quad_r,
-            "quad_l": quad_l,
-            "add_r": add_r,
-            "add_l": add_l,
-            "abd_r": abd_r,
-            "abd_l": abd_l,
-            "recommendation": recommendation
+
+            "player":player,
+            "category":category,
+            "date":datetime.now().strftime("%Y-%m-%d"),
+            "height":height,
+            "weight":weight,
+
+            "ant_r":ant_r,
+            "ant_l":ant_l,
+            "pm_r":pm_r,
+            "pm_l":pm_l,
+            "pl_r":pl_r,
+            "pl_l":pl_l,
+
+            "ham_r":ham_r,
+            "ham_l":ham_l,
+            "quad_r":quad_r,
+            "quad_l":quad_l,
+            "add_r":add_r,
+            "add_l":add_l,
+            "abd_r":abd_r,
+            "abd_l":abd_l,
+
+            "recommendation":recommendation,
+            "risk":risk
+
         }
 
         supabase.table("tests").insert(data).execute()
 
-        st.success("Test uložen do databáze")
+        st.success("Test uložen")
+
+        st.metric("Risk score", risk)
+
+# ---------------- HISTORY ----------------
 
 with tab2:
 
-    st.header("Historie hráčů")
+    st.header("Historie hráče")
 
     response = supabase.table("tests").select("*").execute()
 
     df = pd.DataFrame(response.data)
 
     if len(df)==0:
-        st.info("Zatím žádná data")
+
+        st.info("Žádná data")
 
     else:
-        st.dataframe(df)
+
+        player_select = st.selectbox("Vyber hráče", df["player"].unique())
+
+        player_df = df[df["player"]==player_select]
+
+        st.dataframe(player_df)
+
+        fig = plt.figure()
+
+        plt.plot(player_df["date"], player_df["ham_r"], label="Hamstring R")
+        plt.plot(player_df["date"], player_df["ham_l"], label="Hamstring L")
+
+        plt.legend()
+
+        st.pyplot(fig)
+
+# ---------------- DASHBOARD ----------------
+
+with tab3:
+
+    st.header("Dashboard týmu")
+
+    response = supabase.table("tests").select("*").execute()
+
+    df = pd.DataFrame(response.data)
+
+    if len(df)==0:
+
+        st.info("Žádná data")
+
+    else:
+
+        st.metric("Počet testů", len(df))
+
+        st.write("Průměr hamstring R:", round(df["ham_r"].mean(),2))
+        st.write("Průměr hamstring L:", round(df["ham_l"].mean(),2))
+
+        risk_players = df[df["risk"]>40]
+
+        st.subheader("Rizikoví hráči")
+
+        st.dataframe(risk_players[["player","risk","recommendation"]])
