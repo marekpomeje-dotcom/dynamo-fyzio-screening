@@ -1,4 +1,9 @@
+from supabase import create_client
 
+SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
+SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 import streamlit as st
 import pandas as pd
 import os
@@ -128,17 +133,41 @@ with tab1:
         if addabd_r < 0.8 or addabd_l < 0.8:
             st.warning("Nízký poměr adduktor/abduktor – doporučeno: Copenhagen plank")
 
-        df = load_data()
-        df.loc[len(df)] = [
-            datetime.now().strftime("%Y-%m-%d"),
-            category,player,height,weight,
-            leg_r,leg_l,
-            ant_r,ant_l,pm_r,pm_l,pl_r,pl_l,
-            ham_r,ham_l,quad_r,quad_l,
-            add_r,add_l,abd_r,abd_l
-        ]
-        save_data(df)
-        st.success("Test uložen")
+       recommendation = ""
+
+if ant_r_n < 72 or ant_l_n < 72:
+    recommendation += "Sagittální deficit – ankle mobility, split squat, step-down. "
+
+if hq_r < 0.6 or hq_l < 0.6:
+    recommendation += "Nízké H:Q – Nordic hamstring, excentrický RDL. "
+
+if addabd_r < 0.8 or addabd_l < 0.8:
+    recommendation += "Slabé adduktory – Copenhagen plank. "
+
+data = {
+    "player": player,
+    "category": category,
+    "date": datetime.now().strftime("%Y-%m-%d"),
+    "height": height,
+    "weight": weight,
+    "ant_r": ant_r,
+    "ant_l": ant_l,
+    "pm_r": pm_r,
+    "pm_l": pm_l,
+    "pl_r": pl_r,
+    "pl_l": pl_l,
+    "ham_r": ham_r,
+    "ham_l": ham_l,
+    "quad_r": quad_r,
+    "quad_l": quad_l,
+    "add_r": add_r,
+    "add_l": add_l,
+    "abd_r": abd_r,
+    "abd_l": abd_l,
+    "recommendation": recommendation
+}
+
+supabase.table("tests").insert(data).execute()
 
 with tab2:
     st.header("Databáze hráčů")
