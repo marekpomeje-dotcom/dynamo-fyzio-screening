@@ -1,10 +1,7 @@
 from supabase import create_client
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
 from datetime import datetime
-import os
 
 SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
 SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
@@ -13,60 +10,70 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-# ---------- FUNCTIONS ----------
+# ---------------- FUNCTIONS ----------------
 
 def normalize(value,length):
     if length == 0:
         return 0
     return (value/length)*100
 
-def risk_score(ant,hq,addabd):
+def asym(r,l):
+    if max(r,l)==0:
+        return 0
+    return abs(r-l)/max(r,l)*100
 
-    score = 0
+def diagnose(ant,hq,addabd,ham_asym,quad_asym):
+
+    deficit = "None"
+    injury = "-"
+    solution = "-"
+    risk = 0
 
     if ant < 72:
-        score += 30
+        deficit = "Sagittal control"
+        injury = "ACL risk"
+        solution = "ankle mobility + split squat"
+        risk += 30
 
     if hq < 0.6:
-        score += 30
+        deficit = "Hamstring strength"
+        injury = "Hamstring strain"
+        solution = "Nordic hamstring"
+        risk += 30
 
     if addabd < 0.8:
-        score += 30
+        deficit = "Adductor strength"
+        injury = "Groin injury"
+        solution = "Copenhagen plank"
+        risk += 30
 
-    return score
+    if ham_asym > 10:
+        deficit = "Hamstring asymmetry"
+        injury = "Hamstring strain"
+        solution = "single leg hamstring work"
+        risk += 20
 
-def color(value,limit):
+    if quad_asym > 10:
+        deficit = "Quadriceps asymmetry"
+        injury = "Knee injury"
+        solution = "single leg squat"
+        risk += 20
 
-    if value < limit:
-        return "🔴"
-
-    if value < limit+5:
-        return "🟠"
-
-    return "🟢"
-
-
-# ---------- HEADER ----------
-
-col1,col2 = st.columns([1,6])
-
-with col1:
-    if os.path.exists("logo.png"):
-        st.image("logo.png",width=120)
-
-with col2:
-    st.title("Dynamo Fyzio Screening")
-    st.caption("SK Dynamo České Budějovice – Akademie")
+    return deficit,injury,solution,risk
 
 
-tab1,tab2,tab3,tab4 = st.tabs(["Dashboard","Nové měření","Historie hráčů","Karta hráče"])
+# ---------------- HEADER ----------------
 
+st.title("Dynamo Fyzio Screening")
+st.caption("SK Dynamo České Budějovice – Akademie")
 
-# ---------- DASHBOARD ----------
+tabs = st.tabs(["Dashboard","Nové měření","Karta hráčů","Team summary"])
 
-with tab1:
+# ---------------- DASHBOARD ----------------
 
-    st.header("Team Risk Dashboard")
+with tabs[0]:
+
+    st.header("Risk Dashboard")
 
     response = supabase.table("tests").select("*").execute()
     df = pd.DataFrame(response.data)
@@ -79,18 +86,20 @@ with tab1:
 
         latest = df.sort_values("date").groupby("player").tail(1)
 
-        st.metric("Počet hráčů",len(latest))
+        st.dataframe(
+            latest[[
+                "player",
+                "category",
+                "risk",
+                "deficit",
+                "injury",
+                "solution"
+            ]]
+        )
 
-        risk_players = latest[latest["risk"]>40]
+# ---------------- NEW TEST ----------------
 
-        st.subheader("Rizikoví hráči")
-
-        st.dataframe(risk_players[["player","category","risk","recommendation"]])
-
-
-# ---------- NEW TEST ----------
-
-with tab2:
+with tabs[1]:
 
     st.header("Nové měření")
 
@@ -98,91 +107,58 @@ with tab2:
 
     player = st.text_input("Jméno hráče")
 
-    col1,col2 = st.columns(2)
-
-    with col1:
-        height = st.number_input("Výška",value=180)
-
-    with col2:
-        weight = st.number_input("Váha",value=75)
-
-    st.subheader("Délka končetiny")
-
-    col1,col2 = st.columns(2)
-
-    with col1:
-        leg_r = st.number_input("Pravá DK",value=90.0)
-
-    with col2:
-        leg_l = st.number_input("Levá DK",value=90.0)
+    leg_r = st.number_input("Délka pravé DK",value=90.0)
+    leg_l = st.number_input("Délka levé DK",value=90.0)
 
     st.subheader("Y Balance")
 
-    col1,col2 = st.columns(2)
+    ant_r = st.number_input("ANT pravá")
+    ant_l = st.number_input("ANT levá")
 
-    with col1:
-        ant_r = st.number_input("ANT pravá")
-        pm_r = st.number_input("PM pravá")
-        pl_r = st.number_input("PL pravá")
+    pm_r = st.number_input("PM pravá")
+    pm_l = st.number_input("PM levá")
 
-    with col2:
-        ant_l = st.number_input("ANT levá")
-        pm_l = st.number_input("PM levá")
-        pl_l = st.number_input("PL levá")
+    pl_r = st.number_input("PL pravá")
+    pl_l = st.number_input("PL levá")
 
     st.subheader("Síla")
 
-    col1,col2 = st.columns(2)
+    ham_r = st.number_input("Hamstring pravá")
+    ham_l = st.number_input("Hamstring levá")
 
-    with col1:
-        ham_r = st.number_input("Hamstring pravá")
-        quad_r = st.number_input("Quadriceps pravá")
-        add_r = st.number_input("Adduktor pravá")
-        abd_r = st.number_input("Abduktor pravá")
+    quad_r = st.number_input("Quadriceps pravá")
+    quad_l = st.number_input("Quadriceps levá")
 
-    with col2:
-        ham_l = st.number_input("Hamstring levá")
-        quad_l = st.number_input("Quadriceps levá")
-        add_l = st.number_input("Adduktor levá")
-        abd_l = st.number_input("Abduktor levá")
+    add_r = st.number_input("Adduktor pravá")
+    add_l = st.number_input("Adduktor levá")
 
-    if st.button("Vyhodnotit a uložit"):
+    abd_r = st.number_input("Abduktor pravá")
+    abd_l = st.number_input("Abduktor levá")
+
+    if st.button("Vyhodnotit"):
 
         ant_norm = normalize(ant_r,leg_r)
 
         hq = ham_r/quad_r if quad_r>0 else 0
         addabd = add_r/abd_r if abd_r>0 else 0
 
-        risk = risk_score(ant_norm,hq,addabd)
+        ham_asym = asym(ham_r,ham_l)
+        quad_asym = asym(quad_r,quad_l)
 
-        recommendation = ""
+        deficit,injury,solution,risk = diagnose(
+            ant_norm,
+            hq,
+            addabd,
+            ham_asym,
+            quad_asym
+        )
 
-        if ant_norm < 72:
-            recommendation += "Sagittální deficit – ankle mobility, split squat\n"
+        st.subheader("Diagnostika")
 
-        if hq < 0.6:
-            recommendation += "Nízké H:Q – Nordic hamstring\n"
-
-        if addabd < 0.8:
-            recommendation += "Slabé adduktory – Copenhagen plank\n"
-
-        st.subheader("Vyhodnocení")
-
-        st.write("ANT:",round(ant_norm,1),color(ant_norm,72))
-
-        st.write("H:Q:",round(hq,2),color(hq,0.6))
-
-        st.write("Add/Abd:",round(addabd,2),color(addabd,0.8))
-
-        st.metric("Risk score",risk)
-
-        st.subheader("Doporučení")
-
-        if recommendation=="":
-            st.success("Bez výrazných deficitů")
-
-        else:
-            st.write(recommendation)
+        st.write("PRIMARY DEFICIT:",deficit)
+        st.write("RIZIKO:",injury)
+        st.write("DOPORUČENÍ:",solution)
+        st.write("RISK SCORE:",risk)
 
         data = {
 
@@ -190,28 +166,10 @@ with tab2:
             "category":category,
             "date":datetime.now().strftime("%Y-%m-%d"),
 
-            "height":height,
-            "weight":weight,
-
-            "ant_r":ant_r,
-            "ant_l":ant_l,
-            "pm_r":pm_r,
-            "pm_l":pm_l,
-            "pl_r":pl_r,
-            "pl_l":pl_l,
-
-            "ham_r":ham_r,
-            "ham_l":ham_l,
-            "quad_r":quad_r,
-            "quad_l":quad_l,
-
-            "add_r":add_r,
-            "add_l":add_l,
-            "abd_r":abd_r,
-            "abd_l":abd_l,
-
             "risk":risk,
-            "recommendation":recommendation
+            "deficit":deficit,
+            "injury":injury,
+            "solution":solution
 
         }
 
@@ -219,12 +177,11 @@ with tab2:
 
         st.success("Test uložen")
 
+# ---------------- PLAYER CARD ----------------
 
-# ---------- HISTORY ----------
+with tabs[2]:
 
-with tab3:
-
-    st.header("Historie podle kategorií")
+    st.header("Karta hráčů")
 
     response = supabase.table("tests").select("*").execute()
     df = pd.DataFrame(response.data)
@@ -249,12 +206,22 @@ with tab3:
 
             st.dataframe(cat_df)
 
+            delete_id = st.number_input(
+                f"Smazat ID testu {cat}",
+                step=1
+            )
 
-# ---------- PLAYER CARD ----------
+            if st.button(f"Smazat test {cat}"):
 
-with tab4:
+                supabase.table("tests").delete().eq("id",delete_id).execute()
 
-    st.header("Karta hráče")
+                st.success("Test smazán")
+
+# ---------------- TEAM SUMMARY ----------------
+
+with tabs[3]:
+
+    st.header("Team summary")
 
     response = supabase.table("tests").select("*").execute()
     df = pd.DataFrame(response.data)
@@ -265,48 +232,18 @@ with tab4:
 
     else:
 
-        player_select = st.selectbox("Vyber hráče",df["player"].unique())
+        for cat in ["U16","U17","U18","U19"]:
 
-        player_df = df[df["player"]==player_select]
+            st.subheader(cat)
 
-        st.dataframe(player_df)
+            cat_df = df[df["category"]==cat]
 
-        st.subheader("Graf vývoje síly")
+            if len(cat_df)==0:
 
-        fig = plt.figure()
+                st.write("Žádná data")
 
-        plt.plot(player_df["date"],player_df["ham_r"],label="Hamstring R")
-        plt.plot(player_df["date"],player_df["ham_l"],label="Hamstring L")
+                continue
 
-        plt.legend()
+            summary = cat_df["deficit"].value_counts()
 
-        st.pyplot(fig)
-
-        st.subheader("Radar graf Y Balance")
-
-        latest = player_df.iloc[-1]
-
-        values = [
-
-            latest["ant_r"],
-            latest["pm_r"],
-            latest["pl_r"]
-
-        ]
-
-        labels = ["ANT","PM","PL"]
-
-        angles = np.linspace(0,2*np.pi,len(labels),endpoint=False)
-
-        values = np.concatenate((values,[values[0]]))
-        angles = np.concatenate((angles,[angles[0]]))
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111,polar=True)
-
-        ax.plot(angles,values)
-        ax.fill(angles,values,alpha=0.25)
-
-        ax.set_thetagrids(angles[:-1]*180/np.pi,labels)
-
-        st.pyplot(fig)
+            st.write(summary)
