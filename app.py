@@ -39,7 +39,6 @@ def load_data():
         data = response.data
 
         if data is None:
-            st.warning("Supabase vrátil prázdná data")
             return pd.DataFrame()
 
         df = pd.DataFrame(data)
@@ -62,6 +61,64 @@ def load_data():
 df = load_data()
 
 # -----------------------------
+# SCREENING EVALUATION
+# -----------------------------
+
+if len(df) > 0:
+
+    df["hq_ratio_r"] = df["ham_r"] / df["quad_r"]
+    df["hq_ratio_l"] = df["ham_l"] / df["quad_l"]
+
+    df["addabd_ratio_r"] = df["add_r"] / df["abd_r"]
+    df["addabd_ratio_l"] = df["add_l"] / df["abd_l"]
+
+    risk_list = []
+    deficit_list = []
+    injury_list = []
+    solution_list = []
+
+    for _, row in df.iterrows():
+
+        risk = "LOW"
+        deficit = ""
+        injury = ""
+        solution = ""
+
+        # HAMSTRING DEFICIT
+        if row["hq_ratio_r"] < 0.6 or row["hq_ratio_l"] < 0.6:
+
+            risk = "HIGH"
+            deficit = "Hamstring strength"
+            injury = "Hamstring strain risk"
+            solution = "Nordic hamstring, Romanian deadlift"
+
+        # GROIN DEFICIT
+        elif row["addabd_ratio_r"] < 0.8 or row["addabd_ratio_l"] < 0.8:
+
+            risk = "MEDIUM"
+            deficit = "Groin strength"
+            injury = "Adductor injury risk"
+            solution = "Copenhagen plank"
+
+        # Y BALANCE DEFICIT
+        elif row["ant_r"] < 65 or row["ant_l"] < 65:
+
+            risk = "MEDIUM"
+            deficit = "Sagittal plane control"
+            injury = "Knee injury risk"
+            solution = "Split squat, step-down"
+
+        risk_list.append(risk)
+        deficit_list.append(deficit)
+        injury_list.append(injury)
+        solution_list.append(solution)
+
+    df["risk"] = risk_list
+    df["deficit"] = deficit_list
+    df["injury"] = injury_list
+    df["solution"] = solution_list
+
+# -----------------------------
 # TABS
 # -----------------------------
 
@@ -80,7 +137,7 @@ tab1, tab2, tab3, tab4 = st.tabs(
 
 with tab1:
 
-    st.header("Dashboard")
+    st.header("Rizikoví hráči")
 
     if len(df) == 0:
 
@@ -88,9 +145,14 @@ with tab1:
 
     else:
 
-        st.write("Načteno řádků:", len(df))
+        risk_players = df[df["risk"] != "LOW"]
 
-        st.dataframe(df)
+        st.dataframe(
+            risk_players[
+                ["player","risk","deficit","injury","solution"]
+            ],
+            use_container_width=True
+        )
 
 # -----------------------------
 # PLAYER CARD
@@ -120,7 +182,7 @@ with tab2:
 
 with tab3:
 
-    st.header("Přehled týmu")
+    st.header("Týmový přehled")
 
     if len(df) == 0:
 
@@ -135,6 +197,12 @@ with tab3:
 
         if "ham_l" in df.columns:
             st.write("Průměr Hamstring levá:", round(df["ham_l"].mean(),2))
+
+        if "hq_ratio_r" in df.columns:
+            st.write("Průměr H:Q pravá:", round(df["hq_ratio_r"].mean(),2))
+
+        if "hq_ratio_l" in df.columns:
+            st.write("Průměr H:Q levá:", round(df["hq_ratio_l"].mean(),2))
 
 # -----------------------------
 # IMPORT CSV
