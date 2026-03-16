@@ -5,14 +5,20 @@ from datetime import datetime
 
 DATA_FILE = "data.csv"
 
-# -----------------------------
+# -------------------------
 # LOAD DATA
-# -----------------------------
+# -------------------------
 
 def load_data():
+
     if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
+
+        df = pd.read_csv(DATA_FILE)
+
+        return df
+
     else:
+
         return pd.DataFrame(columns=[
             "date","category","player",
             "ant_r","ant_l","pm_r","pm_l","pl_r","pl_l",
@@ -20,31 +26,34 @@ def load_data():
             "add_r","add_l","abd_r","abd_l"
         ])
 
+
 def save_data(df):
+
     df.to_csv(DATA_FILE,index=False)
+
 
 df = load_data()
 
-# -----------------------------
+# -------------------------
 # PAGE
-# -----------------------------
+# -------------------------
 
 st.set_page_config(page_title="Dynamo Fyzio Screening",layout="wide")
 
 st.title("Dynamo Fyzio Screening")
 st.caption("SK Dynamo České Budějovice – Akademie")
 
-# -----------------------------
+# -------------------------
 # CATEGORY
-# -----------------------------
+# -------------------------
 
 category = st.selectbox("Kategorie",["U16","U17","U18","U19"])
 
-df_cat = df[df["category"]==category]
+df_cat = df[df["category"]==category].copy()
 
-# -----------------------------
+# -------------------------
 # CALCULATIONS
-# -----------------------------
+# -------------------------
 
 def evaluate(row):
 
@@ -68,7 +77,7 @@ def evaluate(row):
         risk="HIGH"
         deficit="Hamstring strength"
         structure="Hamstring complex"
-        solution="Nordic hamstring, RDL"
+        solution="Nordic hamstring, Romanian deadlift"
 
     elif addabd_r < 0.8 or addabd_l < 0.8:
 
@@ -100,9 +109,9 @@ if len(df_cat)>0:
         "risk","deficit","structure","solution"
     ]] = df_cat.apply(evaluate,axis=1)
 
-# -----------------------------
+# -------------------------
 # TABS
-# -----------------------------
+# -------------------------
 
 tab1,tab2,tab3,tab4 = st.tabs([
 "Dashboard",
@@ -111,9 +120,9 @@ tab1,tab2,tab3,tab4 = st.tabs([
 "Správa dat"
 ])
 
-# -----------------------------
+# -------------------------
 # DASHBOARD
-# -----------------------------
+# -------------------------
 
 with tab1:
 
@@ -129,13 +138,20 @@ with tab1:
 
         risk_players = latest[latest["risk"]!="LOW"]
 
-        st.dataframe(risk_players[[
-            "player","risk","deficit","structure","solution"
-        ]])
+        st.dataframe(
+            risk_players[[
+                "player",
+                "risk",
+                "deficit",
+                "structure",
+                "solution"
+            ]],
+            use_container_width=True
+        )
 
-# -----------------------------
+# -------------------------
 # PLAYER CARD
-# -----------------------------
+# -------------------------
 
 with tab2:
 
@@ -153,11 +169,20 @@ with tab2:
 
         pdata = df_cat[df_cat["player"]==player]
 
-        st.dataframe(pdata)
+        st.dataframe(
+            pdata[[
+                "date",
+                "hq_r","hq_l",
+                "addabd_r","addabd_l",
+                "ham_asym","quad_asym","add_asym",
+                "risk","deficit","structure","solution"
+            ]],
+            use_container_width=True
+        )
 
-# -----------------------------
+# -------------------------
 # NEW TEST
-# -----------------------------
+# -------------------------
 
 with tab3:
 
@@ -228,9 +253,9 @@ with tab3:
 
         st.success("Test uložen")
 
-# -----------------------------
+# -------------------------
 # DATA MANAGEMENT
-# -----------------------------
+# -------------------------
 
 with tab4:
 
@@ -242,7 +267,7 @@ with tab4:
 
     else:
 
-        st.dataframe(df)
+        st.dataframe(df,use_container_width=True)
 
         st.download_button(
             "Export CSV",
