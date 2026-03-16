@@ -1,258 +1,236 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client
+import os
+from datetime import datetime
 
-# -------------------------------------------------
-# SUPABASE CONNECTION
-# -------------------------------------------------
+DATA_FILE = "data.csv"
 
-SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
-SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# -------------------------------------------------
-# PAGE SETUP
-# -------------------------------------------------
-
-st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
-
-col1, col2 = st.columns([1,6])
-
-with col1:
-    st.image("logo.png", width=120)
-
-with col2:
-    st.title("Dynamo Fyzio Screening")
-    st.caption("SK Dynamo České Budějovice – Akademie")
-
-# -------------------------------------------------
+# -----------------------------
 # LOAD DATA
-# -------------------------------------------------
+# -----------------------------
 
 def load_data():
 
-    try:
+    if os.path.exists(DATA_FILE):
 
-        response = supabase.table("tests").select("*").execute()
+        return pd.read_csv(DATA_FILE)
 
-        data = response.data
+    else:
 
-        if data is None:
-            return pd.DataFrame()
+        return pd.DataFrame(columns=[
+            "date","category","player",
+            "ant_r","ant_l","pm_r","pm_l","pl_r","pl_l",
+            "ham_r","ham_l","quad_r","quad_l",
+            "add_r","add_l","abd_r","abd_l"
+        ])
 
-        df = pd.DataFrame(data)
+# -----------------------------
+# SAVE DATA
+# -----------------------------
 
-        df.columns = df.columns.str.lower()
+def save_data(df):
 
-        return df
-
-    except Exception as e:
-
-        st.error("Chyba při načítání databáze")
-        st.write(e)
-
-        return pd.DataFrame()
-
+    df.to_csv(DATA_FILE,index=False)
 
 df = load_data()
 
-# -------------------------------------------------
-# CATEGORY SELECTOR
-# -------------------------------------------------
+# -----------------------------
+# PAGE
+# -----------------------------
+
+st.set_page_config(page_title="Dynamo Fyzio Screening",layout="wide")
+
+st.title("Dynamo Fyzio Screening")
+st.caption("SK Dynamo České Budějovice – Akademie")
+
+# -----------------------------
+# CATEGORY
+# -----------------------------
 
 category = st.selectbox(
     "Kategorie",
-    ["U16","U17","U18","U19"],
-    key="category_select"
+    ["U16","U17","U18","U19"]
 )
 
-if len(df) > 0:
+df_cat = df[df["category"]==category]
 
-    df = df[df["category"] == category]
+# -----------------------------
+# CALCULATIONS
+# -----------------------------
 
-# -------------------------------------------------
-# SCREENING CALCULATION
-# -------------------------------------------------
+def evaluate(row):
 
-if len(df) > 0:
+    hq_r = row["ham_r"]/row["quad_r"] if row["quad_r"]>0 else 0
+    hq_l = row["ham_l"]/row["quad_l"] if row["quad_l"]>0 else 0
 
-    df["hq_r"] = df["ham_r"] / df["quad_r"]
-    df["hq_l"] = df["ham_l"] / df["quad_l"]
+    addabd_r = row["add_r"]/row["abd_r"] if row["abd_r"]>0 else 0
+    addabd_l = row["add_l"]/row["abd_l"] if row["abd_l"]>0 else 0
 
-    df["addabd_r"] = df["add_r"] / df["abd_r"]
-    df["addabd_l"] = df["add_l"] / df["abd_l"]
+    risk="LOW"
+    deficit=""
+    injury=""
+    solution=""
 
-    risk=[]
-    deficit=[]
-    injury=[]
-    solution=[]
+    if hq_r < 0.6 or hq_l < 0.6:
 
-    for _,row in df.iterrows():
+        risk="HIGH"
+        deficit="Hamstring strength"
+        injury="Hamstring strain"
+        solution="Nordic hamstring, RDL"
 
-        r="LOW"
-        d=""
-        i=""
-        s=""
+    elif addabd_r < 0.8 or addabd_l < 0.8:
 
-        if row["hq_r"] < 0.6 or row["hq_l"] < 0.6:
+        risk="MEDIUM"
+        deficit="Groin strength"
+        injury="Adductor injury"
+        solution="Copenhagen plank"
 
-            r="HIGH"
-            d="Hamstring strength"
-            i="Hamstring injury risk"
-            s="Nordic hamstring, Romanian deadlift"
+    elif row["ant_r"] < 70 or row["ant_l"] < 70:
 
-        elif row["addabd_r"] < 0.8 or row["addabd_l"] < 0.8:
+        risk="MEDIUM"
+        deficit="Sagittal control"
+        injury="Knee injury risk"
+        solution="Split squat, step-down"
 
-            r="MEDIUM"
-            d="Groin strength"
-            i="Adductor injury risk"
-            s="Copenhagen plank"
+    return pd.Series([risk,deficit,injury,solution])
 
-        elif row["ant_r"] < 70 or row["ant_l"] < 70:
+if len(df_cat)>0:
 
-            r="MEDIUM"
-            d="Sagittal control"
-            i="Knee injury risk"
-            s="Split squat, step-down"
+    df_cat[["risk","deficit","injury","solution"]] = df_cat.apply(evaluate,axis=1)
 
-        risk.append(r)
-        deficit.append(d)
-        injury.append(i)
-        solution.append(s)
-
-    df["risk"]=risk
-    df["deficit"]=deficit
-    df["injury"]=injury
-    df["solution"]=solution
-
-# -------------------------------------------------
+# -----------------------------
 # TABS
-# -------------------------------------------------
+# -----------------------------
 
-tab1,tab2,tab3,tab4,tab5 = st.tabs(
-[
+tab1,tab2,tab3,tab4 = st.tabs([
 "Dashboard",
-"Karta hráčů",
-"Týmový přehled",
-"Import dat",
+"Karta hráče",
+"Nové měření",
 "Správa dat"
-]
-)
+])
 
-# -------------------------------------------------
+# -----------------------------
 # DASHBOARD
-# -------------------------------------------------
+# -----------------------------
 
 with tab1:
 
     st.header("Rizikoví hráči")
 
-    if len(df)==0:
+    if len(df_cat)==0:
 
         st.info("Žádná data")
 
     else:
 
-        latest = df.sort_values("date").groupby("player").tail(1)
+        latest = df_cat.sort_values("date").groupby("player").tail(1)
 
         risk_players = latest[latest["risk"]!="LOW"]
 
-        st.dataframe(
-            risk_players[
-                ["player","risk","deficit","injury","solution"]
-            ],
-            use_container_width=True
-        )
+        st.dataframe(risk_players[[
+            "player","risk","deficit","injury","solution"
+        ]])
 
-# -------------------------------------------------
+# -----------------------------
 # PLAYER CARD
-# -------------------------------------------------
+# -----------------------------
 
 with tab2:
 
     st.header("Karta hráče")
 
-    if len(df)==0:
+    if len(df_cat)==0:
 
         st.info("Žádná data")
 
     else:
 
-        players = sorted(df["player"].dropna().unique())
+        players = sorted(df_cat["player"].unique())
 
-        player = st.selectbox(
-            "Vyber hráče",
-            players,
-            key="player_card"
-        )
+        player = st.selectbox("Vyber hráče",players)
 
-        pdata = df[df["player"]==player]
+        pdata = df_cat[df_cat["player"]==player]
 
-        st.dataframe(pdata,use_container_width=True)
+        st.dataframe(pdata)
 
-# -------------------------------------------------
-# TEAM SUMMARY
-# -------------------------------------------------
+# -----------------------------
+# NEW TEST
+# -----------------------------
 
 with tab3:
 
-    st.header("Týmový přehled")
+    st.header("Nové měření")
 
-    if len(df)==0:
+    player = st.text_input("Jméno hráče")
 
-        st.info("Žádná data")
+    col1,col2 = st.columns(2)
 
-    else:
+    with col1:
 
-        latest = df.sort_values("date").groupby("player").tail(1)
+        ant_r = st.number_input("ANT pravá")
+        pm_r = st.number_input("PM pravá")
+        pl_r = st.number_input("PL pravá")
 
-        summary = latest["deficit"].value_counts()
+    with col2:
 
-        st.subheader("Hlavní deficity týmu")
+        ant_l = st.number_input("ANT levá")
+        pm_l = st.number_input("PM levá")
+        pl_l = st.number_input("PL levá")
 
-        st.dataframe(summary)
+    col3,col4 = st.columns(2)
 
-# -------------------------------------------------
-# IMPORT CSV
-# -------------------------------------------------
+    with col3:
+
+        ham_r = st.number_input("Hamstring pravá")
+        quad_r = st.number_input("Quadriceps pravá")
+        add_r = st.number_input("Adduktor pravá")
+        abd_r = st.number_input("Abduktor pravá")
+
+    with col4:
+
+        ham_l = st.number_input("Hamstring levá")
+        quad_l = st.number_input("Quadriceps levá")
+        add_l = st.number_input("Adduktor levá")
+        abd_l = st.number_input("Abduktor levá")
+
+    if st.button("Uložit test"):
+
+        new_row = pd.DataFrame([{
+
+            "date":datetime.now().strftime("%Y-%m-%d"),
+            "category":category,
+            "player":player,
+
+            "ant_r":ant_r,
+            "ant_l":ant_l,
+            "pm_r":pm_r,
+            "pm_l":pm_l,
+            "pl_r":pl_r,
+            "pl_l":pl_l,
+
+            "ham_r":ham_r,
+            "ham_l":ham_l,
+            "quad_r":quad_r,
+            "quad_l":quad_l,
+
+            "add_r":add_r,
+            "add_l":add_l,
+            "abd_r":abd_r,
+            "abd_l":abd_l
+
+        }])
+
+        df_new = pd.concat([df,new_row],ignore_index=True)
+
+        save_data(df_new)
+
+        st.success("Test uložen")
+
+# -----------------------------
+# DATA MANAGEMENT
+# -----------------------------
 
 with tab4:
-
-    st.header("Import CSV")
-
-    file = st.file_uploader(
-        "Nahraj CSV",
-        key="csv_upload"
-    )
-
-    if file is not None:
-
-        data = pd.read_csv(file)
-
-        st.write("Náhled dat")
-
-        st.dataframe(data)
-
-        if st.button("Importovat data", key="import_button"):
-
-            for _,row in data.iterrows():
-
-                try:
-
-                    supabase.table("tests").insert(row.to_dict()).execute()
-
-                except:
-
-                    pass
-
-            st.success("Import dokončen")
-
-# -------------------------------------------------
-# SAFE DELETE
-# -------------------------------------------------
-
-with tab5:
 
     st.header("Správa dat")
 
@@ -262,31 +240,12 @@ with tab5:
 
     else:
 
-        players = sorted(df["player"].unique())
+        st.dataframe(df)
 
-        player_delete = st.selectbox(
-            "Vyber hráče",
-            players,
-            key="player_delete"
-        )
+        if st.button("Export CSV"):
 
-        player_tests = df[df["player"] == player_delete]
-
-        test_id = st.selectbox(
-            "Vyber test (ID)",
-            player_tests["id"],
-            key="test_delete"
-        )
-
-        if st.button("Smazat test", key="delete_button"):
-
-            try:
-
-                supabase.table("tests").delete().eq("id", test_id).execute()
-
-                st.success("Test byl odstraněn")
-
-            except Exception as e:
-
-                st.error("Mazání selhalo")
-                st.write(e)
+            st.download_button(
+                "Stáhnout data",
+                df.to_csv(index=False),
+                "dynamo_screening.csv"
+            )
