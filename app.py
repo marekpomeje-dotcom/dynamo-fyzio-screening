@@ -17,7 +17,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-col1,col2 = st.columns([1,6])
+col1, col2 = st.columns([1,6])
 
 with col1:
     st.image("logo.png", width=120)
@@ -54,6 +54,7 @@ def load_data():
 
         return pd.DataFrame()
 
+
 df = load_data()
 
 # -------------------------------------------------
@@ -62,7 +63,8 @@ df = load_data()
 
 category = st.selectbox(
     "Kategorie",
-    ["U16","U17","U18","U19"]
+    ["U16","U17","U18","U19"],
+    key="category_select"
 )
 
 if len(df) > 0:
@@ -110,7 +112,7 @@ if len(df) > 0:
         elif row["ant_r"] < 70 or row["ant_l"] < 70:
 
             r="MEDIUM"
-            d="Sagittal plane control"
+            d="Sagittal control"
             i="Knee injury risk"
             s="Split squat, step-down"
 
@@ -179,7 +181,11 @@ with tab2:
 
         players = sorted(df["player"].dropna().unique())
 
-        player = st.selectbox("Vyber hráče",players)
+        player = st.selectbox(
+            "Vyber hráče",
+            players,
+            key="player_card"
+        )
 
         pdata = df[df["player"]==player]
 
@@ -215,7 +221,10 @@ with tab4:
 
     st.header("Import CSV")
 
-    file = st.file_uploader("Nahraj CSV")
+    file = st.file_uploader(
+        "Nahraj CSV",
+        key="csv_upload"
+    )
 
     if file is not None:
 
@@ -225,7 +234,7 @@ with tab4:
 
         st.dataframe(data)
 
-        if st.button("Importovat data"):
+        if st.button("Importovat data", key="import_button"):
 
             for _,row in data.iterrows():
 
@@ -255,16 +264,21 @@ with tab5:
 
         players = sorted(df["player"].unique())
 
-        player = st.selectbox("Vyber hráče", players)
+        player_delete = st.selectbox(
+            "Vyber hráče",
+            players,
+            key="player_delete"
+        )
 
-        player_tests = df[df["player"] == player]
+        player_tests = df[df["player"] == player_delete]
 
         test_id = st.selectbox(
             "Vyber test (ID)",
-            player_tests["id"]
+            player_tests["id"],
+            key="test_delete"
         )
 
-        if st.button("Smazat test"):
+        if st.button("Smazat test", key="delete_button"):
 
             try:
 
