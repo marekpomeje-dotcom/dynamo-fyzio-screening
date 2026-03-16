@@ -10,13 +10,9 @@ DATA_FILE = "data.csv"
 # -----------------------------
 
 def load_data():
-
     if os.path.exists(DATA_FILE):
-
         return pd.read_csv(DATA_FILE)
-
     else:
-
         return pd.DataFrame(columns=[
             "date","category","player",
             "ant_r","ant_l","pm_r","pm_l","pl_r","pl_l",
@@ -24,12 +20,7 @@ def load_data():
             "add_r","add_l","abd_r","abd_l"
         ])
 
-# -----------------------------
-# SAVE DATA
-# -----------------------------
-
 def save_data(df):
-
     df.to_csv(DATA_FILE,index=False)
 
 df = load_data()
@@ -47,10 +38,7 @@ st.caption("SK Dynamo České Budějovice – Akademie")
 # CATEGORY
 # -----------------------------
 
-category = st.selectbox(
-    "Kategorie",
-    ["U16","U17","U18","U19"]
-)
+category = st.selectbox("Kategorie",["U16","U17","U18","U19"])
 
 df_cat = df[df["category"]==category]
 
@@ -66,37 +54,51 @@ def evaluate(row):
     addabd_r = row["add_r"]/row["abd_r"] if row["abd_r"]>0 else 0
     addabd_l = row["add_l"]/row["abd_l"] if row["abd_l"]>0 else 0
 
+    ham_asym = abs(row["ham_r"]-row["ham_l"]) / max(row["ham_r"],row["ham_l"]) *100
+    quad_asym = abs(row["quad_r"]-row["quad_l"]) / max(row["quad_r"],row["quad_l"]) *100
+    add_asym = abs(row["add_r"]-row["add_l"]) / max(row["add_r"],row["add_l"]) *100
+
     risk="LOW"
     deficit=""
-    injury=""
+    structure=""
     solution=""
 
     if hq_r < 0.6 or hq_l < 0.6:
 
         risk="HIGH"
         deficit="Hamstring strength"
-        injury="Hamstring strain"
+        structure="Hamstring complex"
         solution="Nordic hamstring, RDL"
 
     elif addabd_r < 0.8 or addabd_l < 0.8:
 
         risk="MEDIUM"
         deficit="Groin strength"
-        injury="Adductor injury"
+        structure="Adductor group"
         solution="Copenhagen plank"
 
     elif row["ant_r"] < 70 or row["ant_l"] < 70:
 
         risk="MEDIUM"
-        deficit="Sagittal control"
-        injury="Knee injury risk"
+        deficit="Sagittal stability"
+        structure="ACL / Knee"
         solution="Split squat, step-down"
 
-    return pd.Series([risk,deficit,injury,solution])
+    return pd.Series([
+        hq_r,hq_l,
+        addabd_r,addabd_l,
+        ham_asym,quad_asym,add_asym,
+        risk,deficit,structure,solution
+    ])
 
 if len(df_cat)>0:
 
-    df_cat[["risk","deficit","injury","solution"]] = df_cat.apply(evaluate,axis=1)
+    df_cat[[
+        "hq_r","hq_l",
+        "addabd_r","addabd_l",
+        "ham_asym","quad_asym","add_asym",
+        "risk","deficit","structure","solution"
+    ]] = df_cat.apply(evaluate,axis=1)
 
 # -----------------------------
 # TABS
@@ -128,7 +130,7 @@ with tab1:
         risk_players = latest[latest["risk"]!="LOW"]
 
         st.dataframe(risk_players[[
-            "player","risk","deficit","injury","solution"
+            "player","risk","deficit","structure","solution"
         ]])
 
 # -----------------------------
@@ -242,10 +244,8 @@ with tab4:
 
         st.dataframe(df)
 
-        if st.button("Export CSV"):
-
-            st.download_button(
-                "Stáhnout data",
-                df.to_csv(index=False),
-                "dynamo_screening.csv"
-            )
+        st.download_button(
+            "Export CSV",
+            df.to_csv(index=False),
+            "dynamo_screening_export.csv"
+        )
