@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client
 
 # -----------------------------
-# SUPABASE CONNECTION
+# SUPABASE
 # -----------------------------
 
 SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
@@ -17,10 +17,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
-col1, col2 = st.columns([1,6])
+col1,col2 = st.columns([1,6])
 
 with col1:
-    st.image("logo.png", width=120)
+    st.image("logo.png",width=120)
 
 with col2:
     st.title("Dynamo Fyzio Screening")
@@ -32,102 +32,100 @@ with col2:
 
 def load_data():
 
-    try:
+    response = supabase.table("tests").select("*").execute()
 
-        response = supabase.table("tests").select("*").execute()
+    data = response.data
 
-        data = response.data
-
-        if data is None:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(data)
-
-        if len(df) == 0:
-            return df
-
-        df.columns = df.columns.str.lower()
-
-        return df
-
-    except Exception as e:
-
-        st.error("Chyba při načítání databáze")
-        st.write(e)
-
+    if data is None:
         return pd.DataFrame()
+
+    df = pd.DataFrame(data)
+
+    df.columns = df.columns.str.lower()
+
+    return df
 
 
 df = load_data()
 
 # -----------------------------
-# SCREENING EVALUATION
+# CATEGORY SELECTOR
+# -----------------------------
+
+category = st.selectbox(
+    "Kategorie",
+    ["U16","U17","U18","U19"]
+)
+
+if len(df) > 0:
+    df = df[df["category"] == category]
+
+# -----------------------------
+# SCREENING CALCULATION
 # -----------------------------
 
 if len(df) > 0:
 
-    df["hq_ratio_r"] = df["ham_r"] / df["quad_r"]
-    df["hq_ratio_l"] = df["ham_l"] / df["quad_l"]
+    df["hq_r"] = df["ham_r"] / df["quad_r"]
+    df["hq_l"] = df["ham_l"] / df["quad_l"]
 
-    df["addabd_ratio_r"] = df["add_r"] / df["abd_r"]
-    df["addabd_ratio_l"] = df["add_l"] / df["abd_l"]
+    df["addabd_r"] = df["add_r"] / df["abd_r"]
+    df["addabd_l"] = df["add_l"] / df["abd_l"]
 
-    risk_list = []
-    deficit_list = []
-    injury_list = []
-    solution_list = []
+    risk=[]
+    deficit=[]
+    injury=[]
+    solution=[]
 
-    for _, row in df.iterrows():
+    for _,row in df.iterrows():
 
-        risk = "LOW"
-        deficit = ""
-        injury = ""
-        solution = ""
+        r="LOW"
+        d=""
+        i=""
+        s=""
 
-        # HAMSTRING DEFICIT
-        if row["hq_ratio_r"] < 0.6 or row["hq_ratio_l"] < 0.6:
+        if row["hq_r"] < 0.6 or row["hq_l"] < 0.6:
 
-            risk = "HIGH"
-            deficit = "Hamstring strength"
-            injury = "Hamstring strain risk"
-            solution = "Nordic hamstring, Romanian deadlift"
+            r="HIGH"
+            d="Hamstring strength"
+            i="Hamstring injury risk"
+            s="Nordic hamstring, RDL"
 
-        # GROIN DEFICIT
-        elif row["addabd_ratio_r"] < 0.8 or row["addabd_ratio_l"] < 0.8:
+        elif row["addabd_r"] < 0.8 or row["addabd_l"] < 0.8:
 
-            risk = "MEDIUM"
-            deficit = "Groin strength"
-            injury = "Adductor injury risk"
-            solution = "Copenhagen plank"
+            r="MEDIUM"
+            d="Groin strength"
+            i="Adductor injury risk"
+            s="Copenhagen plank"
 
-        # Y BALANCE DEFICIT
-        elif row["ant_r"] < 65 or row["ant_l"] < 65:
+        elif row["ant_r"] < 70 or row["ant_l"] < 70:
 
-            risk = "MEDIUM"
-            deficit = "Sagittal plane control"
-            injury = "Knee injury risk"
-            solution = "Split squat, step-down"
+            r="MEDIUM"
+            d="Sagittal control"
+            i="Knee injury risk"
+            s="Split squat, step-down"
 
-        risk_list.append(risk)
-        deficit_list.append(deficit)
-        injury_list.append(injury)
-        solution_list.append(solution)
+        risk.append(r)
+        deficit.append(d)
+        injury.append(i)
+        solution.append(s)
 
-    df["risk"] = risk_list
-    df["deficit"] = deficit_list
-    df["injury"] = injury_list
-    df["solution"] = solution_list
+    df["risk"]=risk
+    df["deficit"]=deficit
+    df["injury"]=injury
+    df["solution"]=solution
 
 # -----------------------------
 # TABS
 # -----------------------------
 
-tab1, tab2, tab3, tab4 = st.tabs(
+tab1,tab2,tab3,tab4,tab5 = st.tabs(
 [
 "Dashboard",
 "Karta hráčů",
 "Týmový přehled",
-"Import dat"
+"Import dat",
+"Správa dat"
 ]
 )
 
@@ -139,13 +137,15 @@ with tab1:
 
     st.header("Rizikoví hráči")
 
-    if len(df) == 0:
+    if len(df)==0:
 
-        st.info("Zatím nejsou v databázi žádná data.")
+        st.info("Žádná data")
 
     else:
 
-        risk_players = df[df["risk"] != "LOW"]
+        latest = df.sort_values("date").groupby("player").tail(1)
+
+        risk_players = latest[latest["risk"]!="LOW"]
 
         st.dataframe(
             risk_players[
@@ -160,9 +160,9 @@ with tab1:
 
 with tab2:
 
-    st.header("Karta hráčů")
+    st.header("Karta hráče")
 
-    if len(df) == 0:
+    if len(df)==0:
 
         st.info("Žádná data")
 
@@ -170,11 +170,11 @@ with tab2:
 
         players = sorted(df["player"].dropna().unique())
 
-        player = st.selectbox("Vyber hráče", players)
+        player = st.selectbox("Vyber hráče",players)
 
-        player_data = df[df["player"] == player]
+        pdata = df[df["player"]==player]
 
-        st.dataframe(player_data)
+        st.dataframe(pdata,use_container_width=True)
 
 # -----------------------------
 # TEAM SUMMARY
@@ -184,33 +184,27 @@ with tab3:
 
     st.header("Týmový přehled")
 
-    if len(df) == 0:
+    if len(df)==0:
 
         st.info("Žádná data")
 
     else:
 
-        st.metric("Počet testů", len(df))
+        latest = df.sort_values("date").groupby("player").tail(1)
 
-        if "ham_r" in df.columns:
-            st.write("Průměr Hamstring pravá:", round(df["ham_r"].mean(),2))
+        summary = latest["deficit"].value_counts()
 
-        if "ham_l" in df.columns:
-            st.write("Průměr Hamstring levá:", round(df["ham_l"].mean(),2))
+        st.subheader("Hlavní deficity týmu")
 
-        if "hq_ratio_r" in df.columns:
-            st.write("Průměr H:Q pravá:", round(df["hq_ratio_r"].mean(),2))
-
-        if "hq_ratio_l" in df.columns:
-            st.write("Průměr H:Q levá:", round(df["hq_ratio_l"].mean(),2))
+        st.dataframe(summary)
 
 # -----------------------------
-# IMPORT CSV
+# IMPORT
 # -----------------------------
 
 with tab4:
 
-    st.header("Import dat")
+    st.header("Import CSV")
 
     file = st.file_uploader("Nahraj CSV")
 
@@ -218,14 +212,36 @@ with tab4:
 
         data = pd.read_csv(file)
 
-        st.write("Náhled dat")
-
         st.dataframe(data)
 
         if st.button("Importovat"):
 
-            for _, row in data.iterrows():
+            for _,row in data.iterrows():
 
                 supabase.table("tests").insert(row.to_dict()).execute()
 
-            st.success("Data byla importována")
+            st.success("Import dokončen")
+
+# -----------------------------
+# DELETE TEST
+# -----------------------------
+
+with tab5:
+
+    st.header("Správa dat")
+
+    if len(df)==0:
+
+        st.info("Žádná data")
+
+    else:
+
+        st.write("Vyber test k odstranění")
+
+        delete_id = st.number_input("ID testu")
+
+        if st.button("Smazat test"):
+
+            supabase.table("tests").delete().eq("id",delete_id).execute()
+
+            st.success("Test odstraněn")
