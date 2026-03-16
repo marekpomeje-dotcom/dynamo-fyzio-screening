@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-import matplotlib.pyplot as plt
 
 # -----------------------------
 # SUPABASE CONNECTION
@@ -13,7 +12,7 @@ SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -----------------------------
-# PAGE SETUP
+# PAGE
 # -----------------------------
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
@@ -31,24 +30,37 @@ with col2:
 # LOAD DATA
 # -----------------------------
 
-@st.cache_data
 def load_data():
 
-    response = supabase.table("tests").select("*").execute()
+    try:
 
-    df = pd.DataFrame(response.data)
+        response = supabase.table("tests").select("*").execute()
 
-    if len(df) == 0:
+        data = response.data
+
+        if data is None:
+            st.warning("Supabase vrátil prázdná data")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data)
+
+        if len(df) == 0:
+            return df
+
+        df.columns = df.columns.str.lower()
+
         return df
 
-    # sjednotíme názvy sloupců
-    df.columns = df.columns.str.lower()
+    except Exception as e:
 
-    return df
+        st.error("Chyba při načítání databáze")
+        st.write(e)
+
+        return pd.DataFrame()
 
 
 df = load_data()
-st.write(df)
+
 # -----------------------------
 # TABS
 # -----------------------------
@@ -76,25 +88,9 @@ with tab1:
 
     else:
 
-        latest = df.sort_values("date").groupby("player").tail(1)
+        st.write("Načteno řádků:", len(df))
 
-        st.dataframe(
-            latest[
-                [
-                    "player",
-                    "category",
-                    "ant_r",
-                    "ant_l",
-                    "pm_r",
-                    "pm_l",
-                    "pl_r",
-                    "pl_l",
-                    "ham_r",
-                    "ham_l"
-                ]
-            ],
-            use_container_width=True
-        )
+        st.dataframe(df)
 
 # -----------------------------
 # PLAYER CARD
@@ -135,22 +131,20 @@ with tab3:
         st.metric("Počet testů", len(df))
 
         if "ham_r" in df.columns:
-
-            st.write("Průměr hamstring pravá:", round(df["ham_r"].mean(),2))
+            st.write("Průměr Hamstring pravá:", round(df["ham_r"].mean(),2))
 
         if "ham_l" in df.columns:
-
-            st.write("Průměr hamstring levá:", round(df["ham_l"].mean(),2))
+            st.write("Průměr Hamstring levá:", round(df["ham_l"].mean(),2))
 
 # -----------------------------
-# IMPORT DATA
+# IMPORT CSV
 # -----------------------------
 
 with tab4:
 
-    st.header("Import CSV")
+    st.header("Import dat")
 
-    file = st.file_uploader("Nahraj CSV soubor")
+    file = st.file_uploader("Nahraj CSV")
 
     if file is not None:
 
@@ -160,7 +154,7 @@ with tab4:
 
         st.dataframe(data)
 
-        if st.button("Importovat do databáze"):
+        if st.button("Importovat"):
 
             for _, row in data.iterrows():
 
