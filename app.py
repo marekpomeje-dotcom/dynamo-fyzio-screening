@@ -2,55 +2,63 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 
-# -----------------------------
-# SUPABASE
-# -----------------------------
+# -------------------------------------------------
+# SUPABASE CONNECTION
+# -------------------------------------------------
 
 SUPABASE_URL = "https://jczbpentsmzkncakedkq.supabase.co"
 SUPABASE_KEY = "sb_publishable_pncl2bBUaGXvdD0bz_vB1Q_O3NPsL8_"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# -----------------------------
-# PAGE
-# -----------------------------
+# -------------------------------------------------
+# PAGE SETUP
+# -------------------------------------------------
 
 st.set_page_config(page_title="Dynamo Fyzio Screening", layout="wide")
 
 col1,col2 = st.columns([1,6])
 
 with col1:
-    st.image("logo.png",width=120)
+    st.image("logo.png", width=120)
 
 with col2:
     st.title("Dynamo Fyzio Screening")
     st.caption("SK Dynamo České Budějovice – Akademie")
 
-# -----------------------------
+# -------------------------------------------------
 # LOAD DATA
-# -----------------------------
+# -------------------------------------------------
 
 def load_data():
 
-    response = supabase.table("tests").select("*").execute()
+    try:
 
-    data = response.data
+        response = supabase.table("tests").select("*").execute()
 
-    if data is None:
+        data = response.data
+
+        if data is None:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data)
+
+        df.columns = df.columns.str.lower()
+
+        return df
+
+    except Exception as e:
+
+        st.error("Chyba při načítání databáze")
+        st.write(e)
+
         return pd.DataFrame()
-
-    df = pd.DataFrame(data)
-
-    df.columns = df.columns.str.lower()
-
-    return df
-
 
 df = load_data()
 
-# -----------------------------
+# -------------------------------------------------
 # CATEGORY SELECTOR
-# -----------------------------
+# -------------------------------------------------
 
 category = st.selectbox(
     "Kategorie",
@@ -58,11 +66,12 @@ category = st.selectbox(
 )
 
 if len(df) > 0:
+
     df = df[df["category"] == category]
 
-# -----------------------------
+# -------------------------------------------------
 # SCREENING CALCULATION
-# -----------------------------
+# -------------------------------------------------
 
 if len(df) > 0:
 
@@ -89,7 +98,7 @@ if len(df) > 0:
             r="HIGH"
             d="Hamstring strength"
             i="Hamstring injury risk"
-            s="Nordic hamstring, RDL"
+            s="Nordic hamstring, Romanian deadlift"
 
         elif row["addabd_r"] < 0.8 or row["addabd_l"] < 0.8:
 
@@ -101,7 +110,7 @@ if len(df) > 0:
         elif row["ant_r"] < 70 or row["ant_l"] < 70:
 
             r="MEDIUM"
-            d="Sagittal control"
+            d="Sagittal plane control"
             i="Knee injury risk"
             s="Split squat, step-down"
 
@@ -115,9 +124,9 @@ if len(df) > 0:
     df["injury"]=injury
     df["solution"]=solution
 
-# -----------------------------
+# -------------------------------------------------
 # TABS
-# -----------------------------
+# -------------------------------------------------
 
 tab1,tab2,tab3,tab4,tab5 = st.tabs(
 [
@@ -129,9 +138,9 @@ tab1,tab2,tab3,tab4,tab5 = st.tabs(
 ]
 )
 
-# -----------------------------
+# -------------------------------------------------
 # DASHBOARD
-# -----------------------------
+# -------------------------------------------------
 
 with tab1:
 
@@ -154,9 +163,9 @@ with tab1:
             use_container_width=True
         )
 
-# -----------------------------
+# -------------------------------------------------
 # PLAYER CARD
-# -----------------------------
+# -------------------------------------------------
 
 with tab2:
 
@@ -176,9 +185,9 @@ with tab2:
 
         st.dataframe(pdata,use_container_width=True)
 
-# -----------------------------
+# -------------------------------------------------
 # TEAM SUMMARY
-# -----------------------------
+# -------------------------------------------------
 
 with tab3:
 
@@ -198,9 +207,9 @@ with tab3:
 
         st.dataframe(summary)
 
-# -----------------------------
-# IMPORT
-# -----------------------------
+# -------------------------------------------------
+# IMPORT CSV
+# -------------------------------------------------
 
 with tab4:
 
@@ -212,19 +221,27 @@ with tab4:
 
         data = pd.read_csv(file)
 
+        st.write("Náhled dat")
+
         st.dataframe(data)
 
-        if st.button("Importovat"):
+        if st.button("Importovat data"):
 
             for _,row in data.iterrows():
 
-                supabase.table("tests").insert(row.to_dict()).execute()
+                try:
+
+                    supabase.table("tests").insert(row.to_dict()).execute()
+
+                except:
+
+                    pass
 
             st.success("Import dokončen")
 
-# -----------------------------
-# DELETE TEST
-# -----------------------------
+# -------------------------------------------------
+# SAFE DELETE
+# -------------------------------------------------
 
 with tab5:
 
@@ -236,12 +253,26 @@ with tab5:
 
     else:
 
-        st.write("Vyber test k odstranění")
+        players = sorted(df["player"].unique())
 
-        delete_id = st.number_input("ID testu")
+        player = st.selectbox("Vyber hráče", players)
+
+        player_tests = df[df["player"] == player]
+
+        test_id = st.selectbox(
+            "Vyber test (ID)",
+            player_tests["id"]
+        )
 
         if st.button("Smazat test"):
 
-            supabase.table("tests").delete().eq("id",delete_id).execute()
+            try:
 
-            st.success("Test odstraněn")
+                supabase.table("tests").delete().eq("id", test_id).execute()
+
+                st.success("Test byl odstraněn")
+
+            except Exception as e:
+
+                st.error("Mazání selhalo")
+                st.write(e)
